@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Clock3 } from 'lucide-react';
 import { books } from '../data/books.js';
 import { questions } from '../data/questions.js';
+
+const QUESTION_TIME_LIMIT = 20;
+const TIME_EXPIRED_MESSAGE =
+  'Tu tiempo de respuesta se ha terminado. La pregunta sin responder se marcó como incorrecta.';
 
 const levelLabels = {
   literal: 'Nivel Literal',
@@ -43,6 +48,7 @@ export default function Quiz() {
   const [hasConsultedStory, setHasConsultedStory] = useState(false);
   const [quizStarted, setQuizStarted] = useState(false);
   const [activeQuestions, setActiveQuestions] = useState([]);
+  const [timeRemaining, setTimeRemaining] = useState(QUESTION_TIME_LIMIT);
 
   const book = books.find((item) => item.id === bookId);
   const quizQuestions = useMemo(() => questions[bookId]?.[level] ?? [], [bookId, level]);
@@ -51,6 +57,29 @@ export default function Quiz() {
   const progressPercentage = totalQuestions
     ? Math.round(((currentQuestionIndex + 1) / totalQuestions) * 100)
     : 0;
+  const timerPercentage = (timeRemaining / QUESTION_TIME_LIMIT) * 100;
+
+  useEffect(() => {
+    if (!quizStarted || answered || isFinished || !currentQuestion || timeRemaining <= 0) {
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      setTimeRemaining((time) => Math.max(time - 1, 0));
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [answered, currentQuestion, isFinished, quizStarted, timeRemaining]);
+
+  useEffect(() => {
+    if (!quizStarted || answered || isFinished || !currentQuestion || timeRemaining !== 0) {
+      return;
+    }
+
+    setSelectedAnswer('');
+    setFeedback(TIME_EXPIRED_MESSAGE);
+    setAnswered(true);
+  }, [answered, currentQuestion, isFinished, quizStarted, timeRemaining]);
 
   useEffect(() => {
     if (!answered) {
@@ -67,6 +96,7 @@ export default function Quiz() {
       setSelectedAnswer('');
       setFeedback('');
       setAnswered(false);
+      setTimeRemaining(QUESTION_TIME_LIMIT);
     }, 2000);
 
     return () => clearTimeout(timer);
@@ -100,7 +130,7 @@ export default function Quiz() {
   }, [book?.title, bookId, correctCount, isFinished, level, navigate, totalQuestions]);
 
   function handleAnswer(option) {
-    if (answered || !currentQuestion) {
+    if (answered || !currentQuestion || timeRemaining <= 0) {
       return;
     }
 
@@ -123,6 +153,7 @@ export default function Quiz() {
     setCorrectCount(0);
     setAnswered(false);
     setIsFinished(false);
+    setTimeRemaining(QUESTION_TIME_LIMIT);
     resultSent.current = false;
     setQuizStarted(true);
     setHasConsultedStory(false);
@@ -260,8 +291,23 @@ export default function Quiz() {
               </p>
               <h1 className="mt-4 break-words text-3xl font-black sm:text-5xl">{book.title}</h1>
             </div>
-            <div className="w-fit rounded-2xl bg-teal-100 px-5 py-3 text-sm font-black text-teal-800">
-              Correctas: {correctCount}
+            <div className="flex w-fit flex-wrap gap-3 sm:justify-end">
+              <div className="rounded-2xl bg-teal-100 px-5 py-3 text-sm font-black text-teal-800">
+                Correctas: {correctCount}
+              </div>
+              <div
+                aria-live="polite"
+                className={`flex min-w-28 items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-black tabular-nums ${
+                  timeRemaining <= 5
+                    ? 'bg-red-100 text-red-700'
+                    : timeRemaining <= 10
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'bg-sky-100 text-sky-800'
+                }`}
+              >
+                <Clock3 aria-hidden="true" className="h-5 w-5" />
+                {timeRemaining} s
+              </div>
             </div>
           </div>
 
@@ -277,6 +323,25 @@ export default function Quiz() {
                 className="h-full rounded-full bg-teal-500 transition-all duration-500"
                 style={{ width: `${progressPercentage}%` }}
               />
+            </div>
+
+            <div className="mt-5">
+              <div className="flex items-center justify-between gap-4 text-sm font-bold text-slate-600">
+                <span>Tiempo para responder</span>
+                <span className="tabular-nums">{timeRemaining} de {QUESTION_TIME_LIMIT} segundos</span>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className={`h-full rounded-full transition-all duration-1000 ease-linear ${
+                    timeRemaining <= 5
+                      ? 'bg-red-500'
+                      : timeRemaining <= 10
+                        ? 'bg-amber-500'
+                        : 'bg-sky-500'
+                  }`}
+                  style={{ width: `${timerPercentage}%` }}
+                />
+              </div>
             </div>
           </div>
         </header>
